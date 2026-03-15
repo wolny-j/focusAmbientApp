@@ -56,7 +56,11 @@ class SoundManager {
       title: title,
       artist: "Ambient Sleep",
       artwork: [
-        { src: "/assets/images/icon.png", sizes: "192x192", type: "image/png" },
+        {
+          src: `${window.location.origin}/assets/images/icon.png`,
+          sizes: "192x192",
+          type: "image/png",
+        },
       ],
     });
 

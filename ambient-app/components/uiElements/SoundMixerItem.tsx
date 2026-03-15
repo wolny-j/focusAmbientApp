@@ -1,10 +1,52 @@
-import { View, Pressable, StyleSheet } from "react-native";
-import { Audio } from "expo-av";
-import { useState, useRef, useEffect } from "react";
+import { View, Pressable, StyleSheet, Platform } from "react-native";
+import { useState, useEffect } from "react";
 import Slider from "@react-native-community/slider";
 import { MaterialIcons } from "@expo/vector-icons";
 import SoundManager from "../tools/soundManager";
-import soundManager from "../tools/soundManager";
+
+function VolumeSlider({
+  value,
+  color,
+  onValueChange,
+}: {
+  value: number;
+  color: string;
+  onValueChange: (v: number) => void;
+}) {
+  if (Platform.OS === "web") {
+    return (
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={value}
+        onChange={(e) => onValueChange(parseFloat(e.target.value))}
+        style={
+          {
+            flex: 1,
+            accentColor: color,
+            height: 40,
+            width: "100%",
+            cursor: "pointer",
+          } as any
+        }
+      />
+    );
+  }
+  return (
+    <Slider
+      style={styles.slider}
+      minimumValue={0}
+      maximumValue={1}
+      value={value}
+      minimumTrackTintColor={color}
+      maximumTrackTintColor="#444"
+      thumbTintColor={color}
+      onValueChange={onValueChange}
+    />
+  );
+}
 
 export interface SoundMixerItemProps {
   path: string;
@@ -21,38 +63,32 @@ export default function SoundMixerItem({
     SoundManager.isPlaying(path.toString()),
   );
   const [volume, setVolume] = useState<number | null>(null);
+  const [volumeIcon, setVolumeIcon] =
+    useState<keyof typeof MaterialIcons.glyphMap>("volume-up");
 
   useEffect(() => {
     let mounted = true;
-
     const sync = async () => {
       const playing = SoundManager.isPlaying(path.toString());
       setIsPlaying(playing);
-
       if (playing) {
         const v = await SoundManager.getCurrentVolume(path.toString());
-        setVolume(v);
+        if (mounted) setVolume(v);
       }
     };
-
     SoundManager.on("change", sync);
-
     sync();
-
     return () => {
       mounted = false;
       SoundManager.off("change", sync);
     };
   }, []);
-  const [volumeIcon, setVolumeIcon] =
-    useState<keyof typeof MaterialIcons.glyphMap>("volume-up");
+
   useEffect(() => {
     const update = () => {
       setIsPlaying(SoundManager.isPlaying(path.toString()));
     };
-
     SoundManager.on("change", update);
-
     return () => {
       SoundManager.off("change", update);
     };
@@ -81,19 +117,12 @@ export default function SoundMixerItem({
           color="white"
         />
       </Pressable>
-
       <View style={styles.volumeRow}>
         <MaterialIcons name={volumeIcon} size={24} color={color} />
-        <Slider
-          style={styles.slider}
-          minimumValue={0}
-          maximumValue={1}
+        <VolumeSlider
           value={volume ?? 0.5}
-          minimumTrackTintColor={color}
-          maximumTrackTintColor="#444"
-          thumbTintColor={color}
+          color={color}
           onValueChange={(value) => {
-            console.log(`Volume: ${volume}, value: ${value} `);
             setVolume(value);
             SoundManager.setVolume(path.toString(), value);
             if (value === 0) setVolumeIcon("volume-off");
@@ -111,7 +140,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     width: "95%",
-    marginVertical: 15, // przestrzeń między rządami
+    marginVertical: 15,
     paddingVertical: 5,
   },
   icon: {
@@ -125,7 +154,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8, // odstęp między ikoną a sliderem
+    gap: 8,
   },
   slider: {
     flex: 1,

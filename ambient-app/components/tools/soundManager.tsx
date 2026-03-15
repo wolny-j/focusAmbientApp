@@ -5,6 +5,13 @@ import * as FileSystem from "expo-file-system";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { resolveSoundAsset } from "../../app/soundRegistry";
 
+if (typeof document !== "undefined") {
+  // jesteśmy na web
+  Audio.setAudioModeAsync({
+    playsInSilentModeIOS: true,
+    staysActiveInBackground: true,
+  });
+}
 class SoundManager {
   private sounds: Map<string, Audio.Sound> = new Map();
   private playing: Map<string, boolean> = new Map();
@@ -23,23 +30,37 @@ class SoundManager {
   private emitChange() {
     this.emitter.emit("change");
   }
+  private setupMediaSession(title: string) {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator))
+      return;
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: title,
+      artist: "Ambient Sleep",
+      artwork: [
+        { src: "/assets/images/icon.png", sizes: "192x192", type: "image/png" },
+      ],
+    });
+
+    navigator.mediaSession.setActionHandler("pause", () => this.stopAll());
+    navigator.mediaSession.setActionHandler("stop", () => this.stopAll());
+  }
 
   // -------- Playback --------
 
   async play(id: string, source: any, initialVolume = 0.5) {
     if (this.sounds.has(id)) return;
     const resolvedSource = resolveSoundAsset(source);
-    console.log("Playing sound:", id, resolvedSource);
     const { sound } = await Audio.Sound.createAsync(resolvedSource, {
       shouldPlay: true,
       isLooping: true,
     });
 
     await sound.setVolumeAsync(initialVolume);
-
     this.sounds.set(id, sound);
     this.playing.set(id, true);
 
+    this.setupMediaSession(id); // ← dodaj to
     this.emitChange();
   }
 

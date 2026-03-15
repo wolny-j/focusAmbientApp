@@ -2,7 +2,6 @@ import { Tabs } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useEffect } from "react";
 import { Audio } from "expo-av";
-
 export default function TabsLayout() {
   useEffect(() => {
     Audio.setAudioModeAsync({
@@ -17,9 +16,9 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "purple",
+        tabBarActiveTintColor: "#B983FF",
         tabBarInactiveTintColor: "white",
-        tabBarStyle: { backgroundColor: "#050505" },
+        tabBarStyle: { backgroundColor: "#1A1117F0" },
       }}
     >
       <Tabs.Screen

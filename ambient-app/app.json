@@ -26,7 +26,13 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro",
+      "name": "Ambient Sleep",
+      "shortName": "Ambient",
+      "description": "Ambient sounds for sleep",
+      "themeColor": "#0a0a0a",
+      "backgroundColor": "#0a0a0a"
     },
     "plugins": [
       "expo-router",

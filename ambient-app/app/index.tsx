@@ -11,90 +11,197 @@ import {
 import SoundMixerItem from "@/components/uiElements/SoundMixerItem";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRef, useState, useEffect } from "react";
+import TimePicker from "@/components/uiElements/TimePicker";
+import soundManager from "@/components/tools/soundManager";
+import PresetNamePopup from "@/components/uiElements/namePopup";
 
 export default function Home() {
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [presetPanelVisible, setPresetPanelVisible] = useState(false);
+  const [presetList, setPresetList] = useState<string[]>([]);
+  const slideAnim = useRef(new Animated.Value(300)).current;
+
+  const loadPresets = async () => {
+    const keys = await soundManager.loadMixList();
+    setPresetList(keys);
+  };
   return (
     <View style={style.container}>
       <View style={style.row}>
-        <Text style={style.title}>Silent Poet Ambient</Text>
+        <Text style={style.title}>Poetic Ambient</Text>
       </View>
+      <TimePicker />
       <ScrollView
         showsVerticalScrollIndicator={true}
-        contentContainerStyle={{ paddingBottom: 50 }}
+        contentContainerStyle={{ paddingBottom: 10 }}
       >
         <AnimatedCategory title="Nature">
+          <SoundMixerItem path={"rain"} icon="water-drop" color="#4FC3F7" />
           <SoundMixerItem
-            path={require("../assets/sounds/rain_1.mp3")}
-            icon="water-drop"
-            color="cyan"
-          />
-          <SoundMixerItem
-            path={require("../assets/sounds/campfire_1.mp3")}
+            path={"campfire"}
             icon="local-fire-department"
-            color="red"
+            color="#EF5350"
           />
+          <SoundMixerItem path={"ocean_waves"} icon="waves" color="#4FC3F7" />
+          <SoundMixerItem path={"forest"} icon="forest" color="#66BB6A" />
+          <SoundMixerItem path={"wind"} icon="air" color="#B2EBF2" />
+          <SoundMixerItem path={"storm"} icon="thunderstorm" color="#acb892" />
           <SoundMixerItem
-            path={require("../assets/sounds/ocean_waves_1.mp3")}
-            icon="waves"
-            color="lightblue"
-          />
-          <SoundMixerItem
-            path={require("../assets/sounds/forest_1.mp3")}
-            icon="forest"
-            color="lightgreen"
-          />
-          <SoundMixerItem
-            path={require("../assets/sounds/wind_1.mp3")}
-            icon="air"
-            color="lightgray"
-          />
-          <SoundMixerItem
-            path={require("../assets/sounds/storm_1.mp3")}
-            icon="thunderstorm"
-            color="rgb(210, 233, 5)2"
-          />
-          <SoundMixerItem
-            path={require("../assets/sounds/river_1.mp3")}
+            path={"river"}
             icon="water"
             color="rgb(106, 158, 206)"
           />
-          <SoundMixerItem
-            path={require("../assets/sounds/cicada_1.mp3")}
-            icon="bug-report"
-            color="rgb(6, 94, 11)"
-          />
+          <SoundMixerItem path={"cicada"} icon="bug-report" color="#81C784" />
         </AnimatedCategory>
 
         <AnimatedCategory title="Noise">
           <SoundMixerItem
-            path={require("../assets/sounds/white_noise_1.mp3")}
+            path={"white_noise"}
             icon="graphic-eq"
-            color="white"
+            color="#E0E0E0"
           />
           <SoundMixerItem
-            path={require("../assets/sounds/pink_noise_1.mp3")}
+            path={"pink_noise"}
             icon="graphic-eq"
-            color="rgb(183, 145, 221)"
+            color="#F48FB1"
           />
           <SoundMixerItem
-            path={require("../assets/sounds/brown_noise_1.mp3")}
+            path={"brown_noise"}
             icon="graphic-eq"
-            color="rgb(141, 78, 6)"
+            color="#A1887F"
           />
         </AnimatedCategory>
         <AnimatedCategory title="Urban">
           <SoundMixerItem
-            path={require("../assets/sounds/car_street_1.mp3")}
+            path={"car_street"}
             icon="directions-car"
-            color="gray"
+            color="#90A4AE"
           />
-          <SoundMixerItem
-            path={require("../assets/sounds/cafe_1.mp3")}
-            icon="local-cafe"
-            color="rgba(172, 87, 18, 0.98)"
-          />
+          <SoundMixerItem path={"cafe"} icon="local-cafe" color="#8D6E63" />
+          <SoundMixerItem path={"train"} icon="train" color="#78909C" />
+        </AnimatedCategory>
+
+        <AnimatedCategory title="Music">
+          <SoundMixerItem path={"piano"} icon="piano" color="#D7CCC8" />
+          <SoundMixerItem path={"lofi"} icon="music-note" color="#FFB74D" />
         </AnimatedCategory>
       </ScrollView>
+      <View
+        style={{
+          flexDirection: "row",
+          alignSelf: "center",
+          gap: 20,
+          marginBottom: 20,
+        }}
+      >
+        <Pressable
+          onPress={() => {
+            console.log("Play all");
+            setPopupVisible(true);
+          }}
+        >
+          <MaterialIcons name="add" size={32} color="white" />
+        </Pressable>
+        <Pressable
+          onPress={async () => {
+            await loadPresets();
+            setPresetPanelVisible(true);
+
+            Animated.timing(slideAnim, {
+              toValue: 0,
+              duration: 300,
+              useNativeDriver: true,
+            }).start();
+          }}
+        >
+          <MaterialIcons name="queue-music" size={32} color="white" />
+        </Pressable>
+
+        <PresetNamePopup
+          visible={popupVisible}
+          onCancel={() => setPopupVisible(false)}
+          onSave={async (name) => {
+            soundManager.composeMix(name);
+            setPopupVisible(false);
+          }}
+        />
+      </View>
+      {presetPanelVisible && (
+        <Animated.View
+          style={{
+            position: "absolute",
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: "95%",
+            backgroundColor: "#2D1F27",
+            transform: [{ translateX: slideAnim }],
+            padding: 20,
+          }}
+        >
+          <Text
+            style={{
+              color: "white",
+              fontSize: 22,
+              marginBottom: 20,
+              marginTop: 50,
+            }}
+          >
+            Presets
+          </Text>
+
+          <ScrollView>
+            {presetList.map((preset) => (
+              <View
+                key={preset}
+                style={{
+                  marginTop: 20,
+                  paddingVertical: 15,
+                  flexDirection: "row",
+                  alignItems: "center",
+                }}
+              >
+                {/* Nazwa */}
+                <Text style={{ color: "white", fontWeight: 200, fontSize: 22 }}>
+                  {preset}
+                </Text>
+
+                {/* Play przy nazwie */}
+                <Pressable
+                  onPress={async () => {
+                    await soundManager.loadPresetAndPlay(preset);
+                    setPresetPanelVisible(false);
+                  }}
+                  style={{ marginLeft: 15 }}
+                >
+                  <MaterialIcons name="play-arrow" size={30} color="white" />
+                </Pressable>
+
+                {/* Spacer → pcha delete na prawo */}
+                <View style={{ flex: 1 }} />
+
+                {/* Delete po prawej */}
+                <Pressable
+                  onPress={async () => {
+                    await soundManager.deletePreset(preset);
+                    await soundManager.stopAll();
+                    await loadPresets();
+                  }}
+                >
+                  <MaterialIcons name="delete" size={30} color="#E57373" />
+                </Pressable>
+              </View>
+            ))}
+          </ScrollView>
+
+          <Pressable
+            onPress={() => setPresetPanelVisible(false)}
+            style={{ marginTop: 20 }}
+          >
+            <MaterialIcons name="close" size={30} color="#E57373" />
+          </Pressable>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -110,7 +217,6 @@ function AnimatedCategory({
   const [open, setOpen] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const animation = useRef(new Animated.Value(0)).current;
-
   const toggleOpen = () => setOpen(!open);
 
   useEffect(() => {
@@ -119,7 +225,7 @@ function AnimatedCategory({
       duration: 500,
       useNativeDriver: false,
     }).start();
-  }, [open]);
+  }, [animation, open]);
 
   const height = animation.interpolate({
     inputRange: [0, 1],
@@ -177,7 +283,7 @@ const style = StyleSheet.create({
   sectionHeader: {
     color: "white",
     fontSize: 22,
-    fontWeight: 200,
+    fontWeight: 100,
   },
   headerRow: {
     flexDirection: "row",

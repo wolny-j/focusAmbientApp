@@ -39,6 +39,12 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="soundRegistry"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

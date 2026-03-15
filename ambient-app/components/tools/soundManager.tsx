@@ -1,21 +1,38 @@
 import { Audio } from "expo-av";
 import { EventEmitter } from "events";
 import AmbientElement from "./AmbientElement";
-import * as FileSystem from "expo-file-system";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { resolveSoundAsset } from "../../app/soundRegistry";
+import { Platform } from "react-native";
 
 if (typeof document !== "undefined") {
-  // jesteśmy na web
   Audio.setAudioModeAsync({
     playsInSilentModeIOS: true,
     staysActiveInBackground: true,
   });
 }
+
+// Web Audio API types
+interface WebSound {
+  audioElement: HTMLAudioElement;
+  gainNode: GainNode;
+  source: MediaElementAudioSourceNode;
+}
+
 class SoundManager {
   private sounds: Map<string, Audio.Sound> = new Map();
+  private webSounds: Map<string, WebSound> = new Map();
   private playing: Map<string, boolean> = new Map();
+  private volumes: Map<string, number> = new Map();
   private emitter = new EventEmitter();
+  private audioContext: AudioContext | null = null;
+
+  private getAudioContext(): AudioContext {
+    if (!this.audioContext) {
+      this.audioContext = new AudioContext();
+    }
+    return this.audioContext;
+  }
 
   // -------- Event System --------
 
@@ -30,6 +47,7 @@ class SoundManager {
   private emitChange() {
     this.emitter.emit("change");
   }
+
   private setupMediaSession(title: string) {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator))
       return;
@@ -49,64 +67,129 @@ class SoundManager {
   // -------- Playback --------
 
   async play(id: string, source: any, initialVolume = 0.5) {
-    if (this.sounds.has(id)) return;
+    if (this.playing.get(id)) return;
+
+    if (Platform.OS === "web") {
+      await this.playWeb(id, source, initialVolume);
+    } else {
+      await this.playNative(id, source, initialVolume);
+    }
+
+    this.playing.set(id, true);
+    this.volumes.set(id, initialVolume);
+    this.setupMediaSession(id);
+    this.emitChange();
+  }
+
+  private async playNative(id: string, source: any, initialVolume: number) {
     const resolvedSource = resolveSoundAsset(source);
     const { sound } = await Audio.Sound.createAsync(resolvedSource, {
       shouldPlay: true,
       isLooping: true,
     });
-
     await sound.setVolumeAsync(initialVolume);
     this.sounds.set(id, sound);
-    this.playing.set(id, true);
+  }
 
-    this.setupMediaSession(id); // ← dodaj to
-    this.emitChange();
+  private async playWeb(id: string, source: any, initialVolume: number) {
+    const resolvedSource = resolveSoundAsset(source);
+    const ctx = this.getAudioContext();
+
+    // resume context jeśli suspended (wymagane przez iOS)
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
+
+    const audioElement = new window.Audio();
+    audioElement.src = resolvedSource;
+    audioElement.loop = true;
+    audioElement.crossOrigin = "anonymous";
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = initialVolume;
+
+    const source_node = ctx.createMediaElementSource(audioElement);
+    source_node.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    await audioElement.play();
+
+    this.webSounds.set(id, {
+      audioElement,
+      gainNode,
+      source: source_node,
+    });
   }
 
   async setVolume(id: string, volume: number) {
-    const sound = this.sounds.get(id);
-    if (sound) {
-      await sound.setVolumeAsync(volume);
-      this.emitChange();
+    this.volumes.set(id, volume);
+
+    if (Platform.OS === "web") {
+      const webSound = this.webSounds.get(id);
+      if (webSound) {
+        webSound.gainNode.gain.value = volume;
+        this.emitChange();
+      }
+    } else {
+      const sound = this.sounds.get(id);
+      if (sound) {
+        await sound.setVolumeAsync(volume);
+        this.emitChange();
+      }
     }
   }
-  async getCurrentVolume(id: string) {
-    const sound = this.sounds.get(id);
-    if (!sound) return 0.5;
 
-    const status = await sound.getStatusAsync();
-
-    if (status.isLoaded) {
-      return status.volume ?? 0.5;
+  async getCurrentVolume(id: string): Promise<number> {
+    if (Platform.OS === "web") {
+      return this.volumes.get(id) ?? 0.5;
     }
 
+    const sound = this.sounds.get(id);
+    if (!sound) return 0.5;
+    const status = await sound.getStatusAsync();
+    if (status.isLoaded) return status.volume ?? 0.5;
     return 0.5;
   }
 
   async stop(id: string) {
-    const sound = this.sounds.get(id);
-
-    if (sound) {
-      await sound.stopAsync();
-      await sound.unloadAsync();
-
-      this.sounds.delete(id);
-      this.playing.set(id, false);
-
-      this.emitChange();
+    if (Platform.OS === "web") {
+      const webSound = this.webSounds.get(id);
+      if (webSound) {
+        webSound.audioElement.pause();
+        webSound.audioElement.src = "";
+        this.webSounds.delete(id);
+      }
+    } else {
+      const sound = this.sounds.get(id);
+      if (sound) {
+        await sound.stopAsync();
+        await sound.unloadAsync();
+        this.sounds.delete(id);
+      }
     }
+
+    this.playing.set(id, false);
+    this.volumes.delete(id);
+    this.emitChange();
   }
 
   async stopAll() {
-    for (const sound of this.sounds.values()) {
-      await sound.stopAsync();
-      await sound.unloadAsync();
+    if (Platform.OS === "web") {
+      for (const webSound of this.webSounds.values()) {
+        webSound.audioElement.pause();
+        webSound.audioElement.src = "";
+      }
+      this.webSounds.clear();
+    } else {
+      for (const sound of this.sounds.values()) {
+        await sound.stopAsync();
+        await sound.unloadAsync();
+      }
+      this.sounds.clear();
     }
 
-    this.sounds.clear();
     this.playing.clear();
-
+    this.volumes.clear();
     this.emitChange();
   }
 
@@ -117,11 +200,10 @@ class SoundManager {
   async composeMix(name: string) {
     const mix: AmbientElement[] = [];
 
-    for (const [id, sound] of this.sounds.entries()) {
-      const status = await sound.getStatusAsync();
-
-      if (status.isLoaded) {
-        mix.push(new AmbientElement(id, status.volume ?? 1));
+    for (const [id] of this.playing.entries()) {
+      if (this.playing.get(id)) {
+        const volume = this.volumes.get(id) ?? 1;
+        mix.push(new AmbientElement(id, volume));
       }
     }
 
@@ -137,18 +219,6 @@ class SoundManager {
     await this.saveMix(name, JSON.stringify(preset, null, 2));
   }
 
-  async loadMixAndPlay() {
-    const data = await this.loadMix();
-    if (!data) return;
-    const mix = JSON.parse(data) as { id: string; volume: number }[];
-
-    await this.stopAll();
-    for (const item of mix) {
-      await this.play(item.id, item.id);
-      await this.setVolume(item.id, item.volume);
-    }
-  }
-
   async saveMix(name: string, mix: any) {
     try {
       await AsyncStorage.setItem(`preset_${name}`, JSON.stringify(mix));
@@ -160,9 +230,7 @@ class SoundManager {
   async loadMix() {
     try {
       const data = await AsyncStorage.getItem("mix");
-
       if (!data) return null;
-
       return JSON.parse(data);
     } catch (e) {
       console.error(e);
@@ -190,11 +258,8 @@ class SoundManager {
     if (!data) return;
 
     let preset;
-
     try {
       preset = JSON.parse(data);
-
-      // zabezpieczenie przed podwójnym JSON
       while (typeof preset === "string") {
         preset = JSON.parse(preset);
       }
@@ -203,12 +268,10 @@ class SoundManager {
     }
 
     const mix = Array.isArray(preset?.mix) ? preset.mix : [];
-
     await this.stopAll();
 
     for (const item of mix) {
       if (!item?.id) continue;
-
       await this.play(item.id, item.id);
       await this.setVolume(item.id, item.volume ?? 1);
     }
